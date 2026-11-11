@@ -5,35 +5,227 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Lunch Uncle</title>
   <style>
-    :root { --uncle: #fde68a; --you: #dbeafe; --ink: #1f2937; }
+    :root {
+      --uncle: #fde68a; --you: #dbeafe; --ink: #1f2937; --muted: #6b7280; --line: #e5e7eb;
+      --stall: #fff7e6; --awning-a: #d9452b; --awning-b: #fffaf0; --tile: #e7f2ec;
+      --skin: #f1c39b; --skin-shade: #e0a97e; --hair: #9ca3af; --brow: #4b5563;
+      --singlet: #ffffff; --towel: #6aa5d8; --mouth: #7a2e2a;
+    }
     * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
       margin: 0; font-family: system-ui, sans-serif; color: var(--ink);
-      background: #f9fafb; display: flex; flex-direction: column; height: 100vh;
+      background: #f9fafb; display: grid; grid-template-rows: auto 1fr auto; height: 100%;
     }
-    header { padding: 1rem; background: #fff; border-bottom: 1px solid #e5e7eb; }
+    header { padding: .75rem 1rem; background: #fff; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 1rem; }
+    header .titles { flex: 1; min-width: 0; }
     header h1 { margin: 0; font-size: 1.25rem; }
-    header p { margin: .25rem 0 0; color: #6b7280; font-size: .875rem; }
-    #chat { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: .5rem; }
+    header p { margin: .25rem 0 0; color: var(--muted); font-size: .875rem; }
+    #voice { background: #fff; color: var(--ink); border: 1px solid #d1d5db; font-size: .875rem; padding: .45rem .8rem; white-space: nowrap; }
+    #voice[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+    main { display: grid; grid-template-columns: minmax(240px, 340px) minmax(0, 1fr); min-height: 0; }
+
+    /* The stall: Uncle stands under a striped hawker awning. */
+    .stage {
+      position: relative; background: var(--stall); border-right: 1px solid var(--line);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 0 1rem 1rem; overflow: hidden;
+    }
+    .awning {
+      position: absolute; inset: 0 0 auto 0; height: 34px;
+      background: repeating-linear-gradient(90deg, var(--awning-a) 0 28px, var(--awning-b) 28px 56px);
+    }
+    /* Scalloped edge: one half-circle under each stripe, in that stripe's colour. */
+    .awning::after {
+      content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 14px;
+      background:
+        radial-gradient(circle at 14px 0, var(--awning-a) 13.5px, transparent 14px) 0 0 / 56px 14px repeat-x,
+        radial-gradient(circle at 42px 0, var(--awning-b) 13.5px, transparent 14px) 0 0 / 56px 14px repeat-x;
+      filter: drop-shadow(0 2px 1px rgba(0,0,0,.08));
+    }
+    .sign {
+      position: absolute; top: 56px; left: 50%; transform: translateX(-50%);
+      background: #fff; border: 2px solid var(--awning-a); color: var(--awning-a);
+      font-weight: 800; letter-spacing: .08em; font-size: .75rem; padding: .2rem .6rem; border-radius: .3rem; white-space: nowrap;
+    }
+    .counter { position: absolute; left: 0; right: 0; bottom: 0; height: 22%; background: var(--tile);
+      background-image: linear-gradient(90deg, rgba(0,0,0,.05) 1px, transparent 1px), linear-gradient(rgba(0,0,0,.05) 1px, transparent 1px);
+      background-size: 22px 22px; border-top: 6px solid #c9d8cf; }
+    #uncle { position: relative; width: 100%; max-width: 280px; height: auto; display: block; margin-top: 90px; }
+    .status { position: relative; margin-top: .5rem; font-size: .875rem; color: var(--muted); min-height: 1.25rem; text-align: center; }
+
+    /* Uncle's moods and motion */
+    #uncle .bob { transform-origin: 110px 230px; animation: breathe 4s ease-in-out infinite; }
+    #uncle .lids { transform-origin: 110px 112px; transform: scaleY(0); animation: blink 5s infinite; }
+    #uncle .pupils { transition: transform .3s ease; }
+    #uncle .brows { transition: transform .25s ease; transform-origin: 110px 96px; }
+    #uncle .head { transition: transform .4s ease; transform-origin: 110px 170px; }
+    #uncle .think { opacity: 0; transition: opacity .2s; }
+    #uncle .think circle { animation: dot 1.2s infinite ease-in-out; }
+    #uncle .think circle:nth-child(2) { animation-delay: .2s; }
+    #uncle .think circle:nth-child(3) { animation-delay: .4s; }
+
+    #uncle[data-mood="thinking"] .pupils { transform: translate(4px, -4px); }
+    #uncle[data-mood="thinking"] .head { transform: rotate(-5deg); }
+    #uncle[data-mood="thinking"] .think { opacity: 1; }
+    #uncle[data-mood="thinking"] .brow-r { transform: translateY(-4px); }
+    #uncle[data-mood="talking"] .head { animation: nod .9s ease-in-out infinite; }
+    #uncle[data-mood="grumpy"] .brows { transform: translateY(3px); }
+    #uncle[data-mood="grumpy"] .brow-l { transform: rotate(10deg); transform-origin: 92px 96px; }
+    #uncle[data-mood="grumpy"] .brow-r { transform: rotate(-10deg); transform-origin: 128px 96px; }
+
+    /* Mouth shapes: JS sets data-mouth to closed, mid or open. */
+    #uncle .m { display: none; }
+    #uncle[data-mouth="closed"] .m-closed,
+    #uncle[data-mouth="mid"] .m-mid,
+    #uncle[data-mouth="open"] .m-open { display: inline; }
+    #uncle[data-mood="grumpy"][data-mouth="closed"] .m-closed { display: none; }
+    #uncle[data-mood="grumpy"][data-mouth="closed"] .m-frown { display: inline; }
+
+    @keyframes breathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+    @keyframes blink { 0%, 94%, 100% { transform: scaleY(0); } 96% { transform: scaleY(1); } }
+    @keyframes dot { 0%, 100% { transform: translateY(0); opacity: .5; } 50% { transform: translateY(-4px); opacity: 1; } }
+    @keyframes nod { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(1.5deg) translateY(1px); } }
+
+    #chat { overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: .6rem; min-height: 0; }
+    .row { display: flex; gap: .5rem; align-items: flex-end; }
+    .row.you-row { justify-content: flex-end; }
+    .face { width: 34px; height: 34px; flex: none; border-radius: 50%; background: var(--stall); border: 1px solid var(--line); overflow: hidden; }
+    .face svg { width: 100%; height: 100%; display: block; }
+    .face .m, .face .lids, .face .think { display: none; }
+    .face .m-closed { display: inline; }
     .bubble {
-      max-width: 75%; padding: .6rem .9rem; border-radius: 1rem; line-height: 1.4;
+      max-width: min(75%, 46rem); padding: .6rem .9rem; border-radius: 1rem; line-height: 1.45;
       white-space: pre-wrap; word-wrap: break-word;
     }
-    .uncle { background: var(--uncle); align-self: flex-start; border-bottom-left-radius: .25rem; }
-    .you { background: var(--you); align-self: flex-end; border-bottom-right-radius: .25rem; }
-    form { display: flex; gap: .5rem; padding: 1rem; background: #fff; border-top: 1px solid #e5e7eb; }
-    input { flex: 1; padding: .6rem .9rem; font-size: 1rem; border: 1px solid #d1d5db; border-radius: .5rem; }
+    .uncle { background: var(--uncle); border-bottom-left-radius: .25rem; }
+    .you { background: var(--you); border-bottom-right-radius: .25rem; }
+    .typing::after { content: "▍"; margin-left: 1px; animation: caret 1s steps(1) infinite; }
+    @keyframes caret { 50% { opacity: 0; } }
+    .dots { display: inline-flex; gap: 4px; padding: .2rem 0; }
+    .dots i { width: 7px; height: 7px; border-radius: 50%; background: #a16207; animation: dot 1.2s infinite ease-in-out; }
+    .dots i:nth-child(2) { animation-delay: .2s; } .dots i:nth-child(3) { animation-delay: .4s; }
+
+    form { display: flex; gap: .5rem; padding: 1rem; background: #fff; border-top: 1px solid var(--line); }
+    input { flex: 1; min-width: 0; padding: .6rem .9rem; font-size: 1rem; border: 1px solid #d1d5db; border-radius: .5rem; }
     button { padding: .6rem 1.2rem; font-size: 1rem; border: 0; border-radius: .5rem; background: var(--ink); color: #fff; cursor: pointer; }
     button:disabled { opacity: .5; cursor: default; }
+    button:focus-visible, input:focus-visible { outline: 2px solid #d97706; outline-offset: 2px; }
+
+    /* On phones Uncle moves to a short band above the chat. */
+    @media (max-width: 720px) {
+      main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+      .stage { border-right: 0; border-bottom: 1px solid var(--line); flex-direction: row; justify-content: center; gap: .75rem; padding: 0 1rem; height: 170px; align-items: flex-end; }
+      .stage { justify-content: center; }
+      .awning { height: 22px; }
+      .sign { top: 46px; left: auto; right: 1rem; transform: none; font-size: .65rem; }
+      #uncle { width: 150px; margin-top: 0; }
+      .status { align-self: center; text-align: left; margin-top: 2.5rem; max-width: 10rem; }
+      .bubble { max-width: 85%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #uncle *, .dots i, .typing::after { animation: none !important; transition: none !important; }
+    }
   </style>
 </head>
 <body>
   <header>
-    <h1>Lunch Uncle</h1>
-    <p>Tell Uncle what you feel like eating. He is at CT Hub 2, Lavender.</p>
+    <div class="titles">
+      <h1>Lunch Uncle</h1>
+      <p>Tell Uncle what you feel like eating. He is at CT Hub 2, Lavender.</p>
+    </div>
+    <button id="voice" type="button" aria-pressed="false" title="Read Uncle's replies aloud">Voice off</button>
   </header>
 
-  <div id="chat"></div>
+  <main>
+    <section class="stage" aria-label="Lunch Uncle">
+      <div class="awning" aria-hidden="true"></div>
+      <div class="sign" aria-hidden="true">LUNCH UNCLE · CT HUB 2</div>
+      <div class="counter" aria-hidden="true"></div>
+
+      <svg id="uncle" viewBox="0 0 220 240" data-mood="idle" data-mouth="closed" role="img" aria-label="Cartoon of Lunch Uncle">
+        <g class="bob">
+          <!-- body: white singlet, towel over the shoulder -->
+          <path d="M28 240 C30 196 58 178 84 172 L136 172 C162 178 190 196 192 240 Z" fill="var(--skin)"/>
+          <path d="M60 240 C62 206 74 186 88 178 C98 190 122 190 132 178 C146 186 158 206 160 240 Z" fill="var(--singlet)" stroke="#e5e7eb" stroke-width="1.5"/>
+          <path d="M88 178 C98 190 122 190 132 178" fill="none" stroke="#e5e7eb" stroke-width="2"/>
+          <path d="M150 174 C168 176 182 186 186 204 L172 214 C168 198 160 190 146 186 Z" fill="var(--towel)"/>
+          <path d="M156 178 L178 206 M164 176 L184 200" stroke="#ffffff" stroke-width="3" opacity=".7"/>
+          <rect x="98" y="150" width="24" height="28" rx="8" fill="var(--skin-shade)"/>
+
+          <g class="head">
+            <!-- ears -->
+            <ellipse cx="56" cy="118" rx="10" ry="15" fill="var(--skin-shade)"/>
+            <ellipse cx="164" cy="118" rx="10" ry="15" fill="var(--skin-shade)"/>
+            <!-- face -->
+            <ellipse cx="110" cy="112" rx="54" ry="60" fill="var(--skin)"/>
+            <!-- balding top with a few grey strands, grey sides -->
+            <path d="M58 104 C56 78 66 62 78 56 C74 70 72 86 74 100 Z" fill="var(--hair)"/>
+            <path d="M162 104 C164 78 154 62 142 56 C146 70 148 86 146 100 Z" fill="var(--hair)"/>
+            <path d="M96 56 C104 48 116 48 124 54" fill="none" stroke="var(--hair)" stroke-width="3" stroke-linecap="round"/>
+            <path d="M100 52 C108 44 120 46 126 50" fill="none" stroke="var(--hair)" stroke-width="2.5" stroke-linecap="round"/>
+            <!-- forehead lines -->
+            <path d="M92 76 Q110 71 128 76 M96 84 Q110 80 124 84" fill="none" stroke="var(--skin-shade)" stroke-width="2" stroke-linecap="round"/>
+
+            <!-- eyebrows -->
+            <g class="brows">
+              <path class="brow-l" d="M80 98 Q92 90 102 96" fill="none" stroke="var(--brow)" stroke-width="6" stroke-linecap="round"/>
+              <path class="brow-r" d="M118 96 Q128 90 140 98" fill="none" stroke="var(--brow)" stroke-width="6" stroke-linecap="round"/>
+            </g>
+            <!-- eyes -->
+            <ellipse cx="92" cy="112" rx="9" ry="8" fill="#fff"/>
+            <ellipse cx="128" cy="112" rx="9" ry="8" fill="#fff"/>
+            <g class="pupils">
+              <circle cx="93" cy="113" r="4.5" fill="#1f2937"/>
+              <circle cx="129" cy="113" r="4.5" fill="#1f2937"/>
+              <circle cx="94.5" cy="111.5" r="1.3" fill="#fff"/>
+              <circle cx="130.5" cy="111.5" r="1.3" fill="#fff"/>
+            </g>
+            <g class="lids">
+              <ellipse cx="92" cy="112" rx="10" ry="9" fill="var(--skin)"/>
+              <ellipse cx="128" cy="112" rx="10" ry="9" fill="var(--skin)"/>
+            </g>
+            <!-- round spectacles -->
+            <g fill="none" stroke="#374151" stroke-width="2.5">
+              <circle cx="92" cy="112" r="14"/>
+              <circle cx="128" cy="112" r="14"/>
+              <path d="M106 111 Q110 107 114 111 M78 110 L62 106 M142 110 L158 106"/>
+            </g>
+            <!-- nose and cheeks -->
+            <path d="M110 118 Q103 134 108 138 Q112 140 116 137" fill="none" stroke="var(--skin-shade)" stroke-width="3" stroke-linecap="round"/>
+            <ellipse cx="80" cy="136" rx="9" ry="5" fill="#f3a38a" opacity=".45"/>
+            <ellipse cx="140" cy="136" rx="9" ry="5" fill="#f3a38a" opacity=".45"/>
+            <!-- moustache -->
+            <path d="M92 146 Q101 139 110 145 Q119 139 128 146 Q119 150 110 147 Q101 150 92 146 Z" fill="var(--hair)"/>
+
+            <!-- mouths -->
+            <path class="m m-closed" d="M98 155 Q110 161 122 155" fill="none" stroke="var(--mouth)" stroke-width="3" stroke-linecap="round"/>
+            <path class="m m-frown" d="M98 159 Q110 152 122 159" fill="none" stroke="var(--mouth)" stroke-width="3" stroke-linecap="round"/>
+            <g class="m m-mid">
+              <ellipse cx="110" cy="156" rx="10" ry="5" fill="var(--mouth)"/>
+              <ellipse cx="110" cy="158.5" rx="6" ry="2" fill="#e57373"/>
+            </g>
+            <g class="m m-open">
+              <ellipse cx="110" cy="158" rx="12" ry="9" fill="var(--mouth)"/>
+              <rect x="101" y="149.5" width="18" height="3.5" rx="1.5" fill="#fff"/>
+              <ellipse cx="110" cy="163" rx="7" ry="3" fill="#e57373"/>
+            </g>
+          </g>
+
+          <!-- thinking dots -->
+          <g class="think" fill="#a16207">
+            <circle cx="170" cy="56" r="4"/>
+            <circle cx="182" cy="46" r="5"/>
+            <circle cx="196" cy="34" r="6"/>
+          </g>
+        </g>
+      </svg>
+      <div class="status" id="status" aria-live="polite">Uncle waiting for you.</div>
+    </section>
+
+    <div id="chat"></div>
+  </main>
 
   <form id="form">
     <input id="input" placeholder="Uncle, where to eat?" autocomplete="off" autofocus>
@@ -45,17 +237,134 @@
     const form = document.getElementById("form");
     const input = document.getElementById("input");
     const send = document.getElementById("send");
+    const uncle = document.getElementById("uncle");
+    const statusLine = document.getElementById("status");
+    const voiceBtn = document.getElementById("voice");
+    const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     // Conversation so far, in the shape the /chat endpoint expects.
     const history = [];
 
+    // A small copy of Uncle's face for his chat bubbles.
+    const faceSvg = (() => {
+      const clone = uncle.cloneNode(true);
+      clone.removeAttribute("id");
+      clone.removeAttribute("role");
+      clone.removeAttribute("aria-label");
+      clone.removeAttribute("data-mood");
+      clone.removeAttribute("data-mouth");
+      clone.setAttribute("viewBox", "44 44 132 132");
+      clone.setAttribute("aria-hidden", "true");
+      return clone.outerHTML;
+    })();
+
+    function setMood(mood, status) {
+      uncle.dataset.mood = mood;
+      if (status) statusLine.textContent = status;
+    }
+    function setMouth(shape) { uncle.dataset.mouth = shape; }
+
+    // Escape text, then turn **bold** into <strong>.
+    function format(text) {
+      const safe = text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+      return safe.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    }
+    const plain = (text) => text.replace(/\*\*(.+?)\*\*/g, "$1");
+
     function addBubble(role, text) {
+      const row = document.createElement("div");
+      row.className = `row ${role === "user" ? "you-row" : "uncle-row"}`;
+      if (role !== "user") {
+        const face = document.createElement("div");
+        face.className = "face";
+        face.innerHTML = faceSvg;
+        row.appendChild(face);
+      }
       const div = document.createElement("div");
       div.className = `bubble ${role === "user" ? "you" : "uncle"}`;
-      div.textContent = text;
-      chat.appendChild(div);
+      if (text !== undefined) div.innerHTML = format(text);
+      row.appendChild(div);
+      chat.appendChild(row);
       chat.scrollTop = chat.scrollHeight;
       return div;
+    }
+
+    // Mouth shape for one character: vowels open wide, consonants half, gaps closed.
+    function mouthFor(ch) {
+      if (/[aeiouAEIOU]/.test(ch)) return "open";
+      if (/[a-zA-Z0-9]/.test(ch)) return "mid";
+      return "closed";
+    }
+
+    // ---- Voice (the browser's built-in text to speech, off by default) ----
+    const canSpeak = "speechSynthesis" in window;
+    let voiceOn = false;
+    if (!canSpeak) { voiceBtn.hidden = true; }
+    voiceBtn.addEventListener("click", () => {
+      voiceOn = !voiceOn;
+      voiceBtn.setAttribute("aria-pressed", String(voiceOn));
+      voiceBtn.textContent = voiceOn ? "Voice on" : "Voice off";
+      if (!voiceOn) speechSynthesis.cancel();
+    });
+    function pickVoice() {
+      const voices = speechSynthesis.getVoices();
+      return voices.find((v) => /en-SG/i.test(v.lang))
+        || voices.find((v) => /en-(GB|AU|IN)/i.test(v.lang) && /male|george|ryan|james|daniel/i.test(v.name))
+        || voices.find((v) => /^en/i.test(v.lang));
+    }
+
+    // Uncle "says" a reply: the text types out while his mouth moves.
+    // With voice on, the words are revealed as the browser speaks them.
+    function speak(bubble, text) {
+      return new Promise((resolve) => {
+        const spoken = plain(text);
+        let shown = 0;
+        const finish = () => {
+          clearInterval(flap);
+          bubble.classList.remove("typing");
+          bubble.innerHTML = format(text);
+          setMouth("closed");
+          resolve();
+        };
+        const reveal = (n) => {
+          shown = Math.max(shown, Math.min(n, spoken.length));
+          bubble.textContent = spoken.slice(0, shown);
+          chat.scrollTop = chat.scrollHeight;
+        };
+
+        if (reduceMotion && !voiceOn) { finish(); return; }
+        setMood("talking", "Uncle talking...");
+        bubble.classList.add("typing");
+        bubble.textContent = "";
+
+        // Mouth flaps follow the letters around the reveal point.
+        const flap = setInterval(() => {
+          const ch = spoken[shown] ?? " ";
+          setMouth(uncle.dataset.mouth === "closed" ? mouthFor(ch) : (Math.random() < .35 ? "closed" : mouthFor(ch)));
+        }, 110);
+
+        if (voiceOn && canSpeak) {
+          const u = new SpeechSynthesisUtterance(spoken);
+          const v = pickVoice();
+          if (v) u.voice = v;
+          u.rate = 1.05; u.pitch = 0.8;
+          u.onboundary = (e) => reveal(e.charIndex + (e.charLength || 1));
+          u.onend = finish;
+          u.onerror = finish;
+          speechSynthesis.cancel();
+          speechSynthesis.speak(u);
+          // Some voices send no word boundaries: keep typing anyway.
+          const fallback = setInterval(() => {
+            if (shown >= spoken.length) return clearInterval(fallback);
+            reveal(shown + 1);
+          }, 55);
+        } else {
+          const step = setInterval(() => {
+            reveal(shown + 2);
+            if (shown >= spoken.length) { clearInterval(step); setTimeout(finish, 150); }
+          }, 28);
+        }
+      });
     }
 
     form.addEventListener("submit", async (event) => {
@@ -66,8 +375,14 @@
       input.value = "";
       send.disabled = true;
       addBubble("user", message);
-      const thinking = addBubble("assistant", "Uncle thinking...");
+      const bubble = addBubble("assistant");
+      bubble.setAttribute("aria-label", "Uncle thinking...");
+      bubble.innerHTML = '<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>';
+      setMood("thinking", "Uncle thinking...");
+      setMouth("closed");
 
+      let reply;
+      let failed = false;
       try {
         const res = await fetch("/chat", {
           method: "POST",
@@ -75,16 +390,20 @@
           body: JSON.stringify({ history, message }),
         });
         const data = await res.json();
-        const reply = data.reply ?? data.error ?? "No reply.";
-        thinking.textContent = reply;
+        failed = !res.ok;
+        reply = data.reply ?? data.error ?? "No reply.";
         history.push({ role: "user", content: message });
         history.push({ role: "assistant", content: reply });
       } catch (err) {
-        thinking.textContent = "Cannot reach Uncle. Try again.";
-      } finally {
-        send.disabled = false;
-        input.focus();
+        failed = true;
+        reply = "Cannot reach Uncle. Try again.";
       }
+
+      bubble.removeAttribute("aria-label");
+      await speak(bubble, reply);
+      setMood(failed ? "grumpy" : "idle", failed ? "Uncle not happy." : "Uncle waiting for you.");
+      send.disabled = false;
+      input.focus();
     });
 
     addBubble("assistant", "Eh, what you want to eat? Don't waste my time.");
