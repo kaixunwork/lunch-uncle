@@ -1,15 +1,21 @@
-import { buildSystemPrompt } from "./prompt.js";
+import { buildSystemPrompt, buildTimeNote } from "./prompt.js";
 import { toolDefinitions, executeTool } from "./tools.js";
 
-// TODO: set the base URL and model for your OpenAI-compatible provider.
-const LLM_BASE_URL = "TODO";
-const LLM_MODEL = "TODO";
+// OpenCode Go, OpenAI-compatible chat completions endpoint.
+const LLM_BASE_URL = "https://opencode.ai/inference/go/openai/v1";
+const LLM_MODEL = "kimi-k3";
 
 const LLM_TIMEOUT_MS = 20_000;
 const MAX_ROUNDS = 8;
 
 const FALLBACK_REPLY = "Just go Berseh Food Centre lah.";
-const FOOD_WORDS = /\b(eat|lunch|food|makan|hungry|restaurant|hawker)\b/i;
+
+/**
+ * Uncle falls back to the canned reply only when he cannot search for places.
+ */
+export function shouldUseFallback(env) {
+  return !env.GOOGLE_PLACES_API_KEY;
+}
 
 /**
  * Run the agentic loop for one user turn and return Uncle's reply.
@@ -18,13 +24,16 @@ const FOOD_WORDS = /\b(eat|lunch|food|makan|hungry|restaurant|hawker)\b/i;
  */
 export async function runLoop(history, message, env) {
   // If the Places key is missing, Uncle cannot search, so give a safe answer.
-  if (!env.GOOGLE_PLACES_API_KEY || FOOD_WORDS.test(message)) {
+  if (shouldUseFallback(env)) {
     return FALLBACK_REPLY;
   }
 
+  // The system prompt stays the same every turn so it can be cached.
+  // The changing time goes last, just before the new user message.
   const messages = [
     { role: "system", content: buildSystemPrompt() },
     ...history,
+    { role: "system", content: buildTimeNote(new Date()) },
     { role: "user", content: message },
   ];
 
@@ -52,6 +61,7 @@ export async function runLoop(history, message, env) {
         content: result,
       });
     }
+    round++;
   }
 
   return "Uncle tried too many times already. Ask something simpler.";
@@ -83,7 +93,8 @@ async function callModel(messages, env, sessionId) {
 
 function parseArgs(raw) {
   try {
-    return JSON.parse(raw || "{}");
+    const parsed = JSON.parse(raw || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
   } catch {
     return {};
   }

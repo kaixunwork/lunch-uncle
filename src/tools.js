@@ -6,10 +6,11 @@
  * The format functions are the ones covered by tests.
  */
 
-// CT Hub 2, 114 Lavender Street.
-export const CT_HUB_2 = { latitude: 1.3115, longitude: 103.8615 };
+// CT Hub 2, 114 Lavender Street, S338729 (coordinates from OneMap).
+export const CT_HUB_2 = { latitude: 1.311588, longitude: 103.863375 };
 
 const SEARCH_RADIUS_METRES = 800;
+const TOOL_TIMEOUT_MS = 8_000;
 const MAX_PLACES = 10;
 const FORECAST_AREA = "Kallang";
 
@@ -83,16 +84,34 @@ export const toolDefinitions = [
  * Run one tool call requested by the model and return the result as a string.
  */
 export async function executeTool(name, args, env) {
-  switch (name) {
-    case "find_lunch_places":
-      return JSON.stringify(await findLunchPlaces(args, env));
-    case "get_rain_forecast":
-      return JSON.stringify(await getRainForecast());
-    case "get_bus_arrivals":
-      return JSON.stringify(await getBusArrivals(args));
-    default:
-      return JSON.stringify({ error: `Unknown tool: ${name}` });
+  try {
+    switch (name) {
+      case "find_lunch_places":
+        return JSON.stringify(await findLunchPlaces(args, env));
+      case "get_rain_forecast":
+        return JSON.stringify(await getRainForecast());
+      case "get_bus_arrivals":
+        return JSON.stringify(await getBusArrivals(args));
+      default:
+        return JSON.stringify({ error: `Unknown tool: ${name}` });
+    }
+  } catch (err) {
+    // A failing tool should not crash the whole turn: tell the model instead,
+    // so Uncle can answer without that tool.
+    console.error(`tool ${name} failed:`, err);
+    return JSON.stringify(toolErrorResult(name, err));
   }
+}
+
+/**
+ * Turn a thrown tool error into a short result the model can act on.
+ */
+export function toolErrorResult(name, err) {
+  const reason =
+    err?.name === "TimeoutError" || err?.name === "AbortError"
+      ? "timed out"
+      : "failed";
+  return { error: `${name} ${reason}. Answer without it, and say so.` };
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +119,7 @@ export async function executeTool(name, args, env) {
 // ---------------------------------------------------------------------------
 
 async function findLunchPlaces({ query, open_now = false }, env) {
-  const centre = { latitude: 1.3236, longitude: 103.9273 };
+  const centre = CT_HUB_2;
 
   const body = {
     textQuery: query,
@@ -121,6 +140,7 @@ async function findLunchPlaces({ query, open_now = false }, env) {
         "places.id,places.displayName,places.location,places.rating,places.currentOpeningHours",
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(TOOL_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -135,11 +155,14 @@ async function findLunchPlaces({ query, open_now = false }, env) {
  * Shape Places API results into the fields Uncle needs.
  */
 export function formatPlaces(places, origin) {
-  return places.map(({ displayName, rating, location }) => ({
-    name: displayName?.text ?? "Unnamed",
-    rating: rating ?? null,
-    distance_m: Math.round(haversineMetres(origin, location)),
-  }));
+  return places.map(
+    ({ displayName, rating, location, currentOpeningHours }) => ({
+      name: displayName?.text ?? "Unnamed",
+      rating: rating ?? null,
+      distance_m: Math.round(haversineMetres(origin, location)),
+      open_now: currentOpeningHours?.openNow ?? null,
+    }),
+  );
 }
 
 /**
@@ -163,7 +186,9 @@ export function haversineMetres(a, b) {
 // ---------------------------------------------------------------------------
 
 async function getRainForecast() {
-  const res = await fetch(FORECAST_URL);
+  const res = await fetch(FORECAST_URL, {
+    signal: AbortSignal.timeout(TOOL_TIMEOUT_MS),
+  });
   if (!res.ok) {
     return { error: `Forecast API returned ${res.status}` };
   }
@@ -192,7 +217,9 @@ export function formatForecast(payload, area) {
 
 async function getBusArrivals({ stop_code }) {
   const url = `${BUS_URL}?id=${encodeURIComponent(stop_code)}`;
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(TOOL_TIMEOUT_MS),
+  });
   if (!res.ok) {
     return { error: `Bus API returned ${res.status}` };
   }

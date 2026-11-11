@@ -17,10 +17,27 @@ How you work:
 - Keep replies under 120 words.`;
 
 /**
- * Build the system prompt for one request.
+ * Build the system prompt. It is identical on every request, so the
+ * provider can cache it (and the history after it) across turns.
  */
 export function buildSystemPrompt() {
-  const requestId = crypto.randomUUID();
-  const now = new Date().toISOString();
-  return `Request ${requestId} at ${now}. ${PERSONA}`;
+  return PERSONA;
+}
+
+/**
+ * Describe the current time in Singapore (UTC+8) for the model.
+ * Workers run in UTC, so the time zone must be set explicitly.
+ */
+export function buildTimeNote(now) {
+  const formatted = new Intl.DateTimeFormat("en-SG", {
+    timeZone: "Asia/Singapore",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(now);
+  return `Current time in Singapore: ${formatted} (SGT, UTC+8).`;
 }
